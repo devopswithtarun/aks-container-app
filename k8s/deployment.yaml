@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aks-app-deployment
+spec:
+  # How many identical copies (pods) to keep running. If one crashes,
+  # Kubernetes automatically starts a replacement to get back to this number.
+  replicas: 2
+
+  # This selector tells Kubernetes which pods "belong" to this Deployment —
+  # it must match the labels set below under template.metadata.labels.
+  selector:
+    matchLabels:
+      app: aks-app
+
+  template:
+    metadata:
+      labels:
+        app: aks-app
+    spec:
+      containers:
+        - name: aks-app
+          image: acraksappdemo.azurecr.io/aks-container-app:v1
+          ports:
+            - containerPort: 5000
+
+          # Health checks — this is what makes Kubernetes actually useful,
+          # not just "runs a container." Without these, Kubernetes has no
+          # way to know if your app has silently crashed or hung.
+
+          # livenessProbe: "is this pod still alive?" If this fails
+          # repeatedly, Kubernetes kills and restarts the pod.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # readinessProbe: "is this pod ready to receive traffic yet?"
+          # A pod can be alive but not ready (e.g. still starting up) —
+          # the Service won't send it traffic until this passes.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+          # Resource limits — without these, one misbehaving pod could
+          # consume the entire node's CPU/memory and starve everything
+          # else. Setting a request (guaranteed minimum) and a limit
+          # (hard ceiling) is standard practice, not optional polish.
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"

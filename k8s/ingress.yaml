@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aks-app-ingress
+  annotations:
+    # This tells the NGINX Ingress Controller how to route — we'll
+    # install that controller separately, it doesn't come with AKS
+    # by default. This is genuinely one of the more advanced pieces
+    # of this project.
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # Routes traffic to the Service we defined above,
+                # which then load-balances across the pods.
+                name: aks-app-service
+                port:
+                  number: 80
