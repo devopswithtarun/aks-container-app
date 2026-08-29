@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: aks-app-service
+spec:
+  # ClusterIP = only reachable from inside the cluster. This is
+  # deliberate — the Service itself isn't meant to be public. Ingress
+  # (next file) is the only thing that should be internet-facing.
+  type: ClusterIP
+
+  # This must match the labels on the pods (from deployment.yaml) —
+  # this is how the Service knows which pods to send traffic to.
+  selector:
+    app: aks-app
+
+  ports:
+    - port: 80          # the port other things inside the cluster use
+      targetPort: 5000   # the actual port the container listens on

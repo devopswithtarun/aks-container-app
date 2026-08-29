@@ -18,3 +18,39 @@ resource "azurerm_container_registry" "acr" {
   # in favour of managed identity or service principal auth.
   admin_enabled = true
 }
+
+# --- AKS Cluster ---
+# This is the actual Kubernetes control plane + worker nodes.
+resource "azurerm_kubernetes_cluster" "aks" {
+  name                = "aks-container-app-cluster"
+  location            = azurerm_resource_group.aks_app.location
+  resource_group_name = azurerm_resource_group.aks_app.name
+  dns_prefix          = "aksapp"
+
+  # The "default_node_pool" is the group of actual VMs that run your
+  # containers. node_count = 1 keeps cost minimal for a demo — a real
+  # production cluster would run at least 2-3 for redundancy.
+  default_node_pool {
+    name       = "default"
+    node_count = 1
+    vm_size    = "Standard_B2s_v2"
+  }
+
+  # AKS needs an identity to manage other Azure resources on your behalf
+  # (like creating load balancers for Services). SystemAssigned means
+  # Azure creates and manages this identity automatically.
+  identity {
+    type = "SystemAssigned"
+  }
+}
+
+# This grants the AKS cluster's identity permission to actually pull
+# images from ACR. Without this, kubectl can create the Deployment, but
+# every pod will fail with an image pull error — a very common real-world
+# AKS + ACR troubleshooting scenario.
+resource "azurerm_role_assignment" "aks_acr_pull" {
+  principal_id                    = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+  role_definition_name            = "AcrPull"
+  scope                            = azurerm_container_registry.acr.id
+  skip_service_principal_aad_check = true
+}
