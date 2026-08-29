@@ -27,6 +27,11 @@ resource "azurerm_kubernetes_cluster" "aks" {
   resource_group_name = azurerm_resource_group.aks_app.name
   dns_prefix          = "aksapp"
 
+  # Azure enables this by default on new clusters; declaring it
+  # explicitly here stops Terraform from trying to "reset" it during
+  # any future update, which Azure doesn't allow once it's already on.
+  oidc_issuer_enabled = true
+
   # The "default_node_pool" is the group of actual VMs that run your
   # containers. node_count = 1 keeps cost minimal for a demo — a real
   # production cluster would run at least 2-3 for redundancy.
@@ -42,6 +47,13 @@ resource "azurerm_kubernetes_cluster" "aks" {
   identity {
     type = "SystemAssigned"
   }
+
+  # This is what actually turns on Container Insights — without this
+  # block, the Log Analytics workspace below would exist but sit empty,
+  # since nothing would be sending data into it.
+  oms_agent {
+    log_analytics_workspace_id = azurerm_log_analytics_workspace.aks_logs.id
+  }
 }
 
 # This grants the AKS cluster's identity permission to actually pull
@@ -53,4 +65,19 @@ resource "azurerm_role_assignment" "aks_acr_pull" {
   role_definition_name            = "AcrPull"
   scope                            = azurerm_container_registry.acr.id
   skip_service_principal_aad_check = true
+}
+
+# --- Monitoring: Container Insights ---
+# This is a specialized Log Analytics workspace. Once linked to the AKS
+# cluster (via the oms_agent block added to the cluster resource above),
+# Azure automatically collects pod CPU/memory metrics, logs, and
+# container restart events — matching the "Azure Monitor" box in the
+# architecture diagram.
+
+resource "azurerm_log_analytics_workspace" "aks_logs" {
+  name                = "law-aks-app-demo"
+  location            = azurerm_resource_group.aks_app.location
+  resource_group_name = azurerm_resource_group.aks_app.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
 }
