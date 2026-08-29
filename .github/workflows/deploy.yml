@@ -1,0 +1,48 @@
+name: Build and Deploy to AKS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app.py'
+      - 'requirements.txt'
+      - 'Dockerfile'
+      - 'k8s/**'
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Log Docker in to ACR using the same Azure credentials — no
+      # separate registry password needed
+      - name: Log in to ACR
+        run: az acr login --name acraksappdemo
+
+      # Build the image and tag it with the GitHub Actions run number,
+      # so every deploy has a unique, traceable version — not just
+      # overwriting "v1" forever
+      - name: Build and push image
+        run: |
+          docker build -t acraksappdemo.azurecr.io/aks-container-app:${{ github.run_number }} .
+          docker push acraksappdemo.azurecr.io/aks-container-app:${{ github.run_number }}
+
+      # Connect kubectl to the AKS cluster
+      - name: Get AKS credentials
+        run: az aks get-credentials --resource-group rg-aks-container-app --name aks-container-app-cluster --overwrite-existing
+
+      # Update the running Deployment to use the newly built image,
+      # then wait to confirm the rollout actually succeeds — this is
+      # what makes it a real deploy, not just "hope it works"
+      - name: Deploy new image to AKS
+        run: |
+          kubectl set image deployment/aks-app-deployment aks-app=acraksappdemo.azurecr.io/aks-container-app:${{ github.run_number }}
+          kubectl rollout status deployment/aks-app-deployment
